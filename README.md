@@ -1,4 +1,4 @@
-[![CircleCI](https://circleci.com/gh/HPInc/jipp.svg?style=svg&circle-token=4baa4b142e5cc6f6cf6e803a8c5832a9dd755a25)](https://circleci.com/gh/HPInc/jipp)
+[![CircleCI](https://dl.circleci.com/status-badge/img/gh/HPInc/jipp/tree/master.svg?style=svg)](https://dl.circleci.com/status-badge/redirect/gh/HPInc/jipp/tree/master)
 [![CodeCov](https://codecov.io/github/HPInc/jipp/coverage.svg?branch=master)](https://codecov.io/github/HPInc/jipp)
 [![Maven Central](https://maven-badges.herokuapp.com/maven-central/com.hp.jipp/jipp-core/badge.svg)](https://maven-badges.herokuapp.com/maven-central/com.hp.jipp/jipp-core)
 [![Core Docs](https://img.shields.io/badge/docs-core-brightgreen.svg)](https://hpinc.github.io/jipp/api/jipp-core)
@@ -39,8 +39,8 @@ The API is Java-compatible but implemented in Kotlin.
 1. Add the current version of JIPP to your project
 ```gradle
 dependencies {
-    compile 'com.hp.jipp:jipp-core:0.7.12'
-    compile 'com.hp.jipp:jipp-pdl:0.7.12' // Only needed if transforming PDLs
+    compile 'com.hp.jipp:jipp-core:0.7.16'
+    compile 'com.hp.jipp:jipp-pdl:0.7.16' // Only needed if transforming PDLs
 }
 ```
 2. Create an `IppClientTransport` or `IppServerTransport` (see example

@@ -1,5 +1,45 @@
 # History of Changes
 
+## 0.7.16
+
+* Fix DocumentState enum (#185).
+
+## 0.7.16-beta1
+
+* Updated kotlin and gradle version (#167).
+* Update copyright information in model files (#175).
+* Update copyright info in source files.
+* Added missing overrides to extra list (#139).
+* Upgraded IPP registrations to 2024-06-13
+
+## 0.7.15
+
+* Handle sonatype vulnerability (#160).
+* Revert kotlin lib version (#161).
+
+## 0.7.15-beta3
+
+* Handle duplicate attributes and take last (#133).
+* Remove api code for circleci (#158).
+
+## 0.7.15-beta2
+
+* Added fix to set IppPacket elements in Java (#147).
+* Updated access modifier for AttributeGroupImpl (#151)
+
+## 0.7.15-beta1
+
+* Update to 2023-03 registered IANA types (#142).
+* Added delimiter tags and helper functions for notification (#135)
+
+## 0.7.14
+
+* Restore support for deprecated registered IANA types (#130).
+
+## 0.7.13
+
+* Update to 2022-08 registered IANA types (#125).
+
 ## 0.7.12
 
 * Update to 2021-10 registered IANA types (#118).

@@ -1,4 +1,4 @@
-// Copyright 2017 HP Development Company, L.P.
+// Copyright 2017 - 2023 HP Development Company, L.P.
 // SPDX-License-Identifier: MIT
 
 package com.hp.jipp.encoding
@@ -105,8 +105,11 @@ data class IppPacket constructor(
     class Builder
     @JvmOverloads
     constructor(
+        @set:JvmSynthetic
         var code: Int,
+        @set:JvmSynthetic
         var versionNumber: Int = DEFAULT_VERSION_NUMBER,
+        @set:JvmSynthetic
         var requestId: Int = DEFAULT_REQUEST_ID
     ) {
         @JvmOverloads
@@ -133,6 +136,7 @@ data class IppPacket constructor(
             )
         }
 
+        @set:JvmSynthetic
         var status
             get() = Status[code]
             set(value) { code = value.code }
@@ -141,6 +145,7 @@ data class IppPacket constructor(
             this.status = status
         }
 
+        @set:JvmSynthetic
         var operation
             get() = Operation[code]
             set(value) { code = value.code }
@@ -185,6 +190,18 @@ data class IppPacket constructor(
         /** Return the last [Tag.unsupportedAttributes] group, creating it if necessary. */
         val unsupportedAttributes
             get() = group(Tag.unsupportedAttributes)
+
+        /** Return the last [Tag.subscriptionAttributes] group, creating it if necessary. */
+        val subscriptionAttributes
+            get() = group(Tag.subscriptionAttributes)
+
+        /** Return the last [Tag.eventNotificationAttributes] group, creating it if necessary. */
+        val eventNotificationAttributes
+            get() = group(Tag.eventNotificationAttributes)
+
+        /** Return the last [Tag.documentAttributes] group, creating it if necessary. */
+        val documentAttributes
+            get() = group(Tag.documentAttributes)
 
         /** Look up or create a group for [tag] and populate it with [func]. */
         @Suppress("DEPRECATION")
@@ -232,6 +249,30 @@ data class IppPacket constructor(
         /** Get or create the [Tag.unsupportedAttributes] group and add or replace [attributes] in it. */
         fun putUnsupportedAttributes(vararg attributes: Attribute<*>) =
             putUnsupportedAttributes(attributes.toList())
+
+        /** Get or create the [Tag.subscriptionAttributes] group and add or replace [attributes] in it. */
+        fun putSubscriptionAttributes(attributes: Iterable<Attribute<*>>) =
+            putAttributes(Tag.subscriptionAttributes, attributes)
+
+        /** Get or create the [Tag.subscriptionAttributes] group and add or replace [attributes] in it. */
+        fun putSubscriptionAttributes(vararg attributes: Attribute<*>) =
+            putSubscriptionAttributes(attributes.toList())
+
+        /** Get or create the [Tag.eventNotificationAttributes] group and add or replace [attributes] in it. */
+        fun putEventNotificationAttributes(attributes: Iterable<Attribute<*>>) =
+            putAttributes(Tag.eventNotificationAttributes, attributes)
+
+        /** Get or create the [Tag.eventNotificationAttributes] group and add or replace [attributes] in it. */
+        fun putEventNotificationAttributes(vararg attributes: Attribute<*>) =
+            putEventNotificationAttributes(attributes.toList())
+
+        /** Get or create the [Tag.documentAttributes] group and add or replace [attributes] in it. */
+        fun putDocumentAttributes(attributes: Iterable<Attribute<*>>) =
+            putAttributes(Tag.documentAttributes, attributes)
+
+        /** Get or create the [Tag.documentAttributes] group and add or replace [attributes] in it. */
+        fun putDocumentAttributes(vararg attributes: Attribute<*>) =
+            putDocumentAttributes(attributes.toList())
 
         /** Add a new [Tag.jobAttributes] group containing default attributes. */
         @JvmOverloads

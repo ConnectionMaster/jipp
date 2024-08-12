@@ -1,4 +1,6 @@
 #!/usr/bin/python3
+
+# Copyright 2018 - 2023 HP Development Company, L.P.
 #
 # * Reads registrations from http://www.iana.org/assignments/ipp-registrations/ipp-registrations.xml
 # * Converts them into Kotlin files
@@ -13,6 +15,8 @@ import pprint
 import os.path
 import sys
 from jinja2 import Environment, FileSystemLoader # pip install Jinja2
+from datetime import datetime, date
+import git
 
 # Global data
 specs = { }
@@ -24,6 +28,8 @@ collections = { }
 pending_collections = { }
 out_files = [ ]
 proj_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
+path_model_dir = proj_dir + 'src/main/java/com/hp/jipp/model/'
+proj_root = os.path.dirname(os.path.realpath(__file__)) + "/../../"
 warns = 0
 pp = pprint.PrettyPrinter(indent=2)
 
@@ -47,7 +53,12 @@ collections_with_extras = {
     'job-resolvers-supported': 'jobAttributes',
     'job-constraints-supported': 'jobAttributes',
     'printer-icc-profiles': 'jobAttributes',
+    'overrides': 'jobAttributes',
 }
+
+special_ref_logic = ('media-col-database', 'media-col-ready')
+ignore_value_suffix = ('Print-URI', 'Send-URI')
+
 
 def pretty(o):
     return pp.pformat(o).replace('\n', '\n    ')
@@ -84,7 +95,30 @@ def parse_spec(xref, target):
         if spec not in specs:
             specs[spec.lower()] = uri
             specs[spec.upper()] = uri
-
+        # handle spec that exists with same name but different uri
+        elif specs[spec.lower()] != uri:
+            if uri.find("pipermail/ipp") and uri.endswith(".html"):
+                found = re.search('ipp/(\d\d\d\d)', uri)
+                if found and found.group(1):
+                    spec_year = int(found.group(1))
+            else:
+                m = re.search('(\d\d\d\d\d\d\d\d)', uri)        
+                if m:
+                    try:
+                        dt_object = datetime.strptime(m.group(1), "%Y%m%d").date()
+                        spec_year = dt_object.year
+                    except ValueError:
+                        warn("unparseable failed parse '%s' to datetime object from uri: %s" % (m.group(1), uri))
+                else:
+                    warn("unparseable failed to extract spec timestamp from uri: %s" % uri)
+            if spec_year:
+                spec += "-%d" % spec_year
+                if spec not in specs:
+                    specs[spec.lower()] = uri
+                    specs[spec.upper()] = uri
+            else:
+                warn("unparseable failed to extract spec timestamp from uri: %s" % uri)   
+            
     if spec is not None and spec not in target['specs']:
         target['specs'].append(spec)
 
@@ -132,9 +166,9 @@ def fix_syntax(item, syntax = None):
     syntax = re.sub("\|([^ ])", r"| \1", syntax)
 
     if " | " in syntax:
-        # Ignore no-value and unknown since those are accepted everywhere
+        # Ignore no-value, 'no-value' and unknown since those are accepted everywhere
         parts = sorted([fix_syntax({}, part.strip()) for part in syntax.split("|")])
-        syntax = " | ".join([part for part in parts if part != "no-value" and part != "unknown"])
+        syntax = " | ".join([part for part in parts if part != "no-value" and part != "'no-value'" and part != "unknown"])
     item['syntax'] = syntax
     return syntax
 
@@ -177,17 +211,32 @@ def parse_enum(record):
             warn("enum " + attribute + " has unparseable value '" + value + "'")
         return
 
-    # Totally ignore (deprecated), Reserved, (Under Review), etc.
-    if re.search("\(.*\)", name) or "Reserved" in name:
+    # Totally ignore Reserved, (Under Review), etc.
+    suffix = re.search("\(([A-Z a-z]+)\)", name)
+    if (suffix and not suffix.group(1) == "deprecated") or "Reserved" in name:
         return
 
+    # Fix the name by stripping suffix (deprecated)
+    if suffix:
+        name = re.sub(' *\(.*\)', '', name)
+
     try:
+        if name in ignore_value_suffix:
+            value = fix_suffix(value)
         if value.startswith("0x"):
             enum['hex'] = True
         value = int(value, 0)
         enum['values'][name] = value
     except ValueError:
         warn("enum " + attribute + " has non-integer value " + value)
+
+# Fix the value by stripping suffix (deprecated)
+def fix_suffix(suffixed_val):
+    stripped_val = suffixed_val
+    suffix = re.search("\(([A-Z a-z]+)\)", suffixed_val)
+    if suffix and suffix.group(1) == "deprecated":
+        stripped_val = re.sub(' *\(.*\)', '', suffixed_val)
+    return stripped_val
 
 # Parse a single status code
 def parse_status_code(record):
@@ -215,6 +264,16 @@ def parse_keyword(record):
 
     if attribute in obsolete_keywords:
         return
+    
+    suffix = re.search("\(([A-Z a-z]+)\)", attribute)
+    if suffix:
+        attr_name = re.sub(' *\(.*\)', '', attribute)
+
+        # Handle keywords with suffix for now we only handle (deprecated)
+        if not (suffix.group(1) == 'deprecated'):
+               warn("keyword " + attribute + " suffix '" + suffix.group(1) + "' is unparseable")
+        else:
+            return
 
     # XML Fix: proof-print-supported really should point to "< any proof-print member attribute name >"
     # But it's defined manually and correctly so no modification is required.
@@ -256,12 +315,11 @@ def assign_ref(ref, target):
         return True
 
     # XML fix: Correct some known irregularities
-    ref = re.sub('"media" color name$', 'media-color name', ref)
     ref = re.sub('job-default-output-until', 'job-delay-output-until', ref)
-    ref = re.sub(' the "media-col"$', ' the "media-col" Job Template attribute', ref)
-    ref = re.sub(' the "separator-sheets"$', ' the "separator-sheets" Job Template attribute', ref)
-    ref = re.sub(' the "cover-back"$', ' the "cover-back" Job Template attribute', ref)
-    ref = re.sub(' the "cover-front"$', ' the "cover-front" Job Template attribute', ref)
+    ref = re.sub('"media-col" member attribute$', '"media-col" Job Template attribute', ref)
+    ref = re.sub('"separator-sheets" member attribute$', '"separator-sheets" Job Template attribute', ref)
+    ref = re.sub('"cover-back" member attribute$', '"cover-back" Job Template attribute', ref)
+    ref = re.sub('"cover-front" member attribute$', '"cover-front" Job Template attribute', ref)
 
     # A reference to a keyword
     m = re.search("^\"?([a-z-]+)\"?( |keyword|value(s?)|name(s?))*$", ref)
@@ -291,24 +349,25 @@ def assign_ref(ref, target):
         target['ref_members'] = m.group(1)
         return True
 
-    m = re.search("^\"([a-z-]+)\"( .* attribute)?$", ref)
     if m and m.group(1):
         target['ref'] = m.group(1)
         return True
 
-    m = re.search("^Member attributes are the same as the \"([a-z-]+)\" (.*) attribute$", ref, re.IGNORECASE)
+    m = re.search("\"([a-z-]+)\" (.*) attribute$", ref, re.IGNORECASE)
     if m and m.group(1) and m.group(2):
         target['ref_col'] = m.group(1)
+        ref_group = None
         target['ref_group'] = m.group(2)
         return True
 
     m = re.search("^Member attributes are the same as \"([a-z-]+)\"$", ref, re.IGNORECASE)
     if m and m.group(1):
         target['ref_col'] = m.group(1)
+        target['ref_group'] = 'Job Template'
         return True
 
-    # e.g. "<Any Job Template attribute>"
-    m = re.search("([A-Za-z ]+) attribute", ref)
+    # e.g. "<Any Job Template attribute> or <Any Job Template Attribute>"
+    m = re.search("([A-Za-z ]+) attribute", ref, re.IGNORECASE)
     if m and ' ' in m.group(1):
         target['ref_group'] = m.group(1)
         return True
@@ -317,6 +376,7 @@ def assign_ref(ref, target):
 
 crossover_attributes = {
     'system-xri-supported': 'printer-xri-supported',
+    'printer-xri-requested': 'printer-xri-supported',
     'system-contact-col': 'printer-contact-col',
     'system-impressions-completed-col': 'job-impressions-col',
     'system-media-sheets-completed-col': 'job-media-sheets-col',
@@ -324,12 +384,17 @@ crossover_attributes = {
     'printer-impressions-completed-col': 'job-impressions-col',
     'printer-media-sheets-completed-col': 'job-media-sheets-col',
     'printer-pages-completed-col': 'job-pages-col',
+    'media-overprint-default': 'media-overprint',
+    'document-format-details-detected': 'document-format-details'
 }
 
 ignored_attributes = [
-    # XML Fix (obsolete or maybe just deprecated)
-    'document-format-details-supported',
+    # XML Fix (obsolete)
+    #'document-format-details-supported'
 ]
+
+# list of members that are obsolete in one attribute but used in other
+suffix_ignore_list = ['compression', 'ipp-attribute-fidelity', 'job-mandatory-attributes']
 
 # Parse a single attribute record
 def parse_attribute(record):
@@ -343,19 +408,21 @@ def parse_attribute(record):
     collection = attributes.setdefault(collection_name, { })
 
     # Ignore (UnderReview) (Deprecated) etc
-    if re.search("\(.*\)", attr_name):
+    suffix = re.search("\(([A-Z a-z]+)\)", attr_name)
+    if suffix:
         attr_name = re.sub(' *\(.*\)', '', attr_name)
-        if attr_name in collection:
-            del collection[attr_name]
-        return
+
+        # Do not delete attributes with extension or deprecated suffix
+        if not (suffix.group(1) == 'extension' or suffix.group(1) == 'deprecated'):
+            if attr_name in collection:
+                del collection[attr_name]
+                return
+            elif attr_name not in suffix_ignore_list:
+                ignored_attributes.append(attr_name)
+
 
     if attr_name in ignored_attributes:
         return
-
-    # XML fix (date-time-at-creation | unknown)
-    if attr_name == "date-time-at-creation | unknown":
-        attr_name = "date-time-at-creation"
-        syntax_name += " | unknown"
 
     attr = collection.setdefault(attr_name, {
         'name': attr_name, 'specs': [ ], 'syntax': syntax_name, 'members': { } } )
@@ -368,16 +435,17 @@ def parse_attribute(record):
 
     # XML fix (no members referenced)
     if member_name is None and attr_name in crossover_attributes:
-        member_name = '< Member attributes are the same as "%s" >' % crossover_attributes[attr_name]
+        member_name = '<Any "%s" member attribute>' % crossover_attributes[attr_name]
 
     if submember_name is not None:
         submember_name = submember_name.text
 
-    if attr_name == 'printer-xri-requested':
+    # Handle non specified reference in Job Status
+    if collection_name != 'Operation' and attr_name == 'client-info':
         if member_name:
-            warn("printer-xri-requested members are now specified and should be used")
-        attr['ref_col'] = 'printer-xri-supported'
-        return
+            warn("client-info members are now specified and should be used")
+        attr['ref_col'] = 'client-info'
+        attr['ref_group'] = 'Operation'
 
     if member_name is not None:
         if member_name.endswith('(extension)'):
@@ -405,6 +473,10 @@ def parse_attribute(record):
         fix_syntax(attr)
 
         if submember_name is not None:
+            if submember_name.endswith('(extension)'):
+                # Chop off (extension) and use it to replace former member syntax
+                submember_name = submember_name[:-len('(extension)')]
+
             if submember_name.startswith('<'):
                 if not assign_ref(submember_name, attr):
                     warn("Unparseable '" + attr_name + "' member '" + member_name + "'" +
@@ -446,6 +518,30 @@ def camel_class(string):
 
 def camel_class_path(string):
     return "".join([word.title() for word in re.split("[ _-]", string) if len(word) > 0])
+
+def copyright_period(class_name, extension = ".kt"):
+    file_path = os.path.abspath(path_model_dir + class_name + extension)
+
+    if os.path.isfile(file_path):
+        creation_year = get_creation_year(file_path)
+        if creation_year and creation_year != xml_update_year:
+            return "%d - %d" % (creation_year, xml_update_year)
+    return "%d" % xml_update_year
+
+def get_creation_year(file_path):
+    try:
+        repository = git.Repo(proj_root);
+        git_add_timestamp =  repository.git.log('--diff-filter=A', '--follow', '--format=%aD', '-1', '--' , file_path)
+        try:
+            if git_add_timestamp:
+                date_object = datetime.strptime(git_add_timestamp, "%a, %d %b %Y %H:%M:%S %z")
+                return date_object.year
+        except:
+            warn("Failed to parse git timestamp")
+    except Exception as error:
+        warn("Unable to initialize git, please setup git in environment path")
+        warn(error)
+    return None
 
 java_keywords = [
     "abstract", "continue", "for", "new", "switch", "assert", "default", "goto", "package", "synchronized",
@@ -761,12 +857,24 @@ def emit_attributes(env):
                 referent = attributes[type['ref_group']][type['ref_col']]
                 # Push members over to referent
                 for new_member in list(type['members'].values()):
-                    if new_member['name'] in referent['members'] and \
+                    if type['name'] not in special_ref_logic and new_member['name'] in referent['members'] and \
                             referent['members'][new_member['name']] != new_member:
                         warn("Collection type already has different member " + new_member['name'], referent)
+
+                # add member attributes of media-col to media-col-database due to [PWG5100.7]
+                if type['name'] == 'media-col-database':
+                    for k, v in referent['members'].items():
+                        type['members'][k] = v
+                    type['members']['media-size'] = copy.deepcopy(type['members']['media-size'])
+                    type['members']['media-size']['members']['x-dimension']['syntax'] = 'integer(1:MAX) | rangeOfInteger(1:MAX)'
+                    type['members']['media-size']['members']['y-dimension']['syntax'] = 'integer(1:MAX) | rangeOfInteger(1:MAX)'
+                    type['ref_col'] = type['name']
+                elif type['name'] == 'media-col-ready':
+                    type['ref_col'] = 'media-col-database'
+                    type['members'] = {}
                 else:
                     referent['members'][new_member['name']] = new_member
-                type['members'] = { }
+                    type['members'] = {}
 
     # Pass 2: Emit collection types having members
     for group in list(attributes.values()):
@@ -796,7 +904,13 @@ def emit_attributes(env):
                 old_type = types[name]
                 if type['syntax'] == 'collection' and old_type['name'] == type['name']:
                     old_type['specs'] = sorted(set(old_type['specs'] + type['specs']))
-                    type = None
+                    if old_type.get('set') != type.get('set'):
+                        warn("Difference in syntax detected for '%s'" % name)
+
+                    if type['name'] == 'finishings-col':
+                        type['specs'] = sorted(set(old_type['specs'] + type['specs']))
+                    else:
+                        type = None
                 elif set([type['syntax'], old_type['syntax']]) == set(['name', 'keyword | name']):
                     old_type['specs'] = sorted(set(old_type['specs'] + type['specs']))
                     old_type['syntax'] = 'keyword | name'
@@ -939,13 +1053,19 @@ def emit_collection(env, type):
         if member['members']:
             member['kimpl'] = '    ' + collection_template.render(
                 name=member['name'], collection=member, app=os.path.basename(sys.argv[0]), updated=updated,
-                specs=specs, noheader=True).replace('\n', '\n    ').strip()
+                specs=specs, noheader=True, obverse=True).replace('\n', '\n    ').strip()
 
     original_type['emitted'] = True
+
+    # Maintain sequence of overrides attributes
+    flag = True
+    if name == "overrides":
+        flag = False
+
     with open(prep_file(name), 'w') as file:
         file.write(rstrip_all(collection_template.render(
             name=name, collection=type, app=os.path.basename(sys.argv[0]),
-            updated=updated, specs=specs)))
+            updated=updated, specs=specs, obverse=flag)))
 
 def rstrip_all(text):
     return re.sub(' +\n', '\n', text)
@@ -979,6 +1099,7 @@ def emit_code():
     env.filters['camel_member'] = camel_member
     env.filters['spaced_title'] = spaced_title
     env.filters['upper'] = upper
+    env.filters['copyright_period'] = copyright_period
 
     emit_kind(env, 'enum.kt.tmpl', enums, emit_enum)
     emit_kind(env, 'keyword.java.tmpl', keywords, emit_keyword)
@@ -1015,13 +1136,21 @@ for elem in tree.iter('{*}registry'):
     if elem.find('{*}title').text == "Internet Printing Protocol (IPP) Registrations":
         updated = elem.find('{*}updated').text
 
+xml_update_year = None
+if updated:
+    updated_dt_obj = datetime.strptime(updated, "%Y-%m-%d").date()
+    xml_update_year = updated_dt_obj.year
+
+if not xml_update_year:
+    warn("Unable to calculate updated timestamp")
+
 parse_records(tree, "Enum Attribute Values", parse_enum)
 parse_records(tree, "Keyword Attribute Values", parse_keyword)
 
 # XML Fix: preset-name not in keywords listing because no values are defined for it.
 keywords['preset-name'] = {
     'name': 'preset-name',
-    'specs': [ 'IPPPRESET'],
+    'specs': [ 'PWG5100.13'],
     'syntax': 'keyword | name',
     'values' : [ ],
     'empty_ok' : True

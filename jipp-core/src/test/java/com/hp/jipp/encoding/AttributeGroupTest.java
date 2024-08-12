@@ -1,3 +1,6 @@
+// Copyright 2017 - 2023 HP Development Company, L.P.
+// SPDX-License-Identifier: MIT
+
 package com.hp.jipp.encoding;
 
 import com.hp.jipp.model.CoveringName;
@@ -8,6 +11,7 @@ import com.hp.jipp.model.ImpositionTemplate;
 import com.hp.jipp.model.JobState;
 import com.hp.jipp.model.JobStateReason;
 import com.hp.jipp.model.MediaCol;
+import com.hp.jipp.model.MediaColDatabase;
 import com.hp.jipp.model.Operation;
 import com.hp.jipp.model.Status;
 import com.hp.jipp.model.Types;
@@ -119,11 +123,20 @@ public class AttributeGroupTest {
         assertNull(group.get(Types.attributesNaturalLanguage));
     }
 
-    @Test(expected = BuildError.class)
+    @Test
     public void duplicateName() {
-        groupOf(operationAttributes,
+        AttributeGroup grp = groupOf(operationAttributes,
                 Types.attributesCharset.of("utf-8"),
-                Types.attributesCharset.of("utf-8"));
+                Types.attributesCharset.of("utf-8"),
+                Types.printerUri.of(URI.create("ipp://10.0.0.23/ipp/printer")),
+                Types.attributesNaturalLanguage.of("en"),
+                Types.attributesNaturalLanguage.of("en-us"),
+                Types.attributesNaturalLanguage.of("fr"),
+                Types.attributesNaturalLanguage.of("de")
+        );
+        assertEquals(Types.attributesCharset.of("utf-8"), grp.get(Types.attributesCharset));
+        assertEquals(Types.printerUri.of(URI.create("ipp://10.0.0.23/ipp/printer")), grp.get(Types.printerUri));
+        assertEquals(Types.attributesNaturalLanguage.of("de"), grp.get(Types.attributesNaturalLanguage));
     }
 
     @Test
@@ -221,7 +234,7 @@ public class AttributeGroupTest {
     @Test
     public void mutableSetMultiple() {
         MutableAttributeGroup mutableGroup = mutableGroupOf(operationAttributes);
-        mutableGroup.set(Types.mediaColDatabase, Arrays.asList(new MediaCol(), new MediaCol()));
+        mutableGroup.set(Types.mediaColDatabase, Arrays.asList(new MediaColDatabase(), new MediaColDatabase()));
         assertEquals(2, mutableGroup.get(Types.mediaColDatabase).size());
     }
 
