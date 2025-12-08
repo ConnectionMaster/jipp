@@ -86,13 +86,17 @@ data class PwgSettings @JvmOverloads constructor(
             val default = PwgFeedTransform(1, 1)
 
             /** Return the correct transform given a 0-based page number, sides mode, and sheet-back requirements. */
-            fun lookup(pageNumber: Int, sides: String, sheetBack: String, jobPagesPerSet: Int?) =
-                if ((jobPagesPerSet?.let {
+            fun lookup(pageNumber: Int, sides: String, sheetBack: String, jobPagesPerSet: Int?) : PwgFeedTransform {
+                val adjustedPageNumber = jobPagesPerSet?.let {
+                    // For odd jpps in duplex, increment before next set to allow printer blank page insertion
                     if (it.isOdd && (pageNumber / it).isOdd && sides != Sides.oneSided) {
-                        // For odd jpps in duplex, increment before next set to allow printer blank page insertion
-                        pageNumber + 1;
-                    } else pageNumber
-                } ?: pageNumber).isEven) default else transforms.getOrDefault(sides to sheetBack, default)
+                        pageNumber + 1
+                    } else {
+                        pageNumber
+                    }
+                } ?: pageNumber
+                return if (adjustedPageNumber.isEven) default else transforms.getOrDefault(sides to sheetBack, default)
+            }
         }
     }
 
