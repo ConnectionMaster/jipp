@@ -1,5 +1,9 @@
 # History of Changes
 
+## 0.7.18-alpha1
+
+* Backside page transformation based on jpps (#212)
+
 ## 0.7.17
 
 * Fix copyright in source code (#208)
