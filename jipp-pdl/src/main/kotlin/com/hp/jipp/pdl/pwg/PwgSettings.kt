@@ -12,6 +12,7 @@ import com.hp.jipp.pdl.OutputSettings
 import com.hp.jipp.pdl.RenderableDocument
 import com.hp.jipp.pdl.RenderablePage
 import com.hp.jipp.pdl.isEven
+import com.hp.jipp.pdl.isOdd
 
 /**
  * Provide settings for PWG-Raster output.
@@ -50,7 +51,7 @@ data class PwgSettings @JvmOverloads constructor(
         /** 0-based page number. */
         pageNumber: Int
     ): PwgHeader {
-        val transform = PwgFeedTransform.lookup(pageNumber, output.sides, sheetBack)
+        val transform = PwgFeedTransform.lookup(pageNumber, output.sides, sheetBack, output.jobPagesPerSet)
         return PwgHeader(
             hwResolutionX = doc.dpi,
             hwResolutionY = doc.dpi,
@@ -85,8 +86,17 @@ data class PwgSettings @JvmOverloads constructor(
             val default = PwgFeedTransform(1, 1)
 
             /** Return the correct transform given a 0-based page number, sides mode, and sheet-back requirements. */
-            fun lookup(pageNumber: Int, sides: String, sheetBack: String) =
-                if (pageNumber.isEven) default else transforms.getOrDefault(sides to sheetBack, default)
+            fun lookup(pageNumber: Int, sides: String, sheetBack: String, jobPagesPerSet: Int?): PwgFeedTransform {
+                val adjustedPageNumber = jobPagesPerSet?.let {
+                    // For odd jpps in duplex, increment before next set to allow printer blank page insertion
+                    if (it.isOdd && (pageNumber / it).isOdd && sides != Sides.oneSided) {
+                        pageNumber + 1
+                    } else {
+                        pageNumber
+                    }
+                } ?: pageNumber
+                return if (adjustedPageNumber.isEven) default else transforms.getOrDefault(sides to sheetBack, default)
+            }
         }
     }
 

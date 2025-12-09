@@ -32,5 +32,8 @@ data class OutputSettings @JvmOverloads constructor(
      * Note: if this is set for an IPP job, substitute [Types.copies] to 1 and [Types.jobPagesPerSet] to an
      * appropriate value (see [PclmWriter.calculateJobPagesPerSet] for PCLM and document size for PWG raster).
      */
-    val copies: Int = 1
+    val copies: Int = 1,
+
+    /** Job Pages Per Set value when copies not supported, used for backside page transformation logic  */
+    val jobPagesPerSet: Int? = null
 )
